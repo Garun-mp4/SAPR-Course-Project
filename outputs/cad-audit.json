@@ -1,0 +1,31 @@
+{
+  "format": "dwg",
+  "version": "AC1032",
+  "verified": true,
+  "insertion_units": 4,
+  "tool_version": "2026.42",
+  "build_revision": "b6fbac39ffc7",
+  "bounds": {
+    "max": [
+      115,
+      80,
+      33
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "manifest": {
+    "by_layer": {
+      "0": 6
+    },
+    "by_type": {
+      "3D Solid": 6
+    },
+    "total": 6
+  },
+  "issues": [],
+  "sha256": "6fe770a91634b7dc92a8ea89fe4b014beec3f67cfc27ce157f417765f93936de"
+}
