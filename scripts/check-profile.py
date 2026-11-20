@@ -59,6 +59,7 @@ def main():
     expected_bounds = [box["length"], box["width"], box["base_height"] + box["lid_thickness"]]
     require(audit["verified"] and audit["insertion_units"] == 4, "CAD file must be verified in millimeters.")
     require(audit["bounds"] == {"min": [0, 0, 0], "max": expected_bounds}, "Overall CAD dimensions differ.")
+    require(audit["reopened_acis"]["bounds"] == audit["bounds"], "Reopened DWG dimensions differ.")
     dwg_hash = hashlib.sha256((ROOT / "outputs/SAPR-001-assembly.dwg").read_bytes()).hexdigest()
     require(dwg_hash == audit["sha256"], "CAD file differs from the verified release.")
     print("PASS KiCad nets, firmware profile, DWG dimensions and digest")

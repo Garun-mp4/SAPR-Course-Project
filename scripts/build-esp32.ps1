@@ -7,7 +7,7 @@ $stage = Join-Path $env:LOCALAPPDATA ('Temp\sapr-esp32-' + [Guid]::NewGuid().ToS
 if ($stage -match '[^\x21-\x7E]') { throw 'ESP-IDF staging requires an ASCII path without spaces.' }
 New-Item -ItemType Directory -Path $stage | Out-Null
 try {
-    foreach ($name in 'platformio.ini', 'CMakeLists.txt', 'sdkconfig.defaults', 'src', 'include') {
+    foreach ($name in 'platformio.ini', 'CMakeLists.txt', 'sdkconfig.defaults', 'partitions.csv', 'src', 'include') {
         Copy-Item -LiteralPath (Join-Path $root $name) -Destination $stage -Recurse
     }
     & $python -m platformio run -d $stage -j 2
