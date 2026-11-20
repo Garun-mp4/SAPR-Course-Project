@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "SAPR")(type "KiCad")(uri "${KIPRJMOD}/SAPR.kicad_sym")(options "")(descr "SAPR ventilation modules"))
+)

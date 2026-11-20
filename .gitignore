@@ -1,0 +1,11 @@
+.env
+/include/network_config.hpp
+.venv/
+.pio/
+__pycache__/
+/build/
+/sdkconfig.sapr*
+*.kicad_prl
+*.bak
+*.dwl
+*.dwl2
