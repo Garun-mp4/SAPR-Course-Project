@@ -53,6 +53,12 @@ struct SensorSession {
     uint64_t last_ready = 0;
 };
 
+void restart_sensor(i2c_master_dev_handle_t device, SensorSession& session) {
+    send_command(device, 0x3f86);
+    // The next scheduled poll is at least 1000 ms later. STOP needs 500 ms.
+    session.started = false;
+}
+
 void scd41_sample(i2c_master_dev_handle_t device, Controller& controller, SensorSession& session) {
     if (!device) {
         controller.sensor_error(Quality::protocol);
@@ -61,21 +67,24 @@ void scd41_sample(i2c_master_dev_handle_t device, Controller& controller, Sensor
     if (!session.started) {
         session.started = send_command(device, 0x21b1);
         session.last_ready = monotonic_ms();
-        if (!session.started) controller.sensor_error(Quality::timeout);
+        if (!session.started) {
+            controller.sensor_error(Quality::timeout);
+            restart_sensor(device, session);
+        }
         return;
     }
     // SCD4x command timing and CRC framing follow the SCD41 portion of AirCheck's driver.
     uint8_t status_bytes[3]{};
     if (!send_command(device, 0xe4b8)) {
         controller.sensor_error(Quality::timeout);
-        session.started = false;
+        restart_sensor(device, session);
         return;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
     uint16_t status = 0;
     if (i2c_master_receive(device, status_bytes, sizeof status_bytes, 30) != ESP_OK) {
         controller.sensor_error(Quality::timeout);
-        session.started = false;
+        restart_sensor(device, session);
         return;
     }
     if (!decode_scd41_word(status_bytes, status)) {
@@ -85,15 +94,14 @@ void scd41_sample(i2c_master_dev_handle_t device, Controller& controller, Sensor
     if ((status & 0x07ff) == 0) {
         if (monotonic_ms() - session.last_ready >= stale_ms) {
             controller.sensor_error(Quality::stale);
-            gpio_set_level(fan, 0);
-            send_command(device, 0x3f86);
-            session.started = false;  // Retry at the next poll, after the sensor's 500 ms stop interval.
+            restart_sensor(device, session);
         }
         return;
     }
     session.last_ready = monotonic_ms();
     if (!send_command(device, 0xec05)) {
         controller.sensor_error(Quality::timeout);
+        restart_sensor(device, session);
         return;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -101,6 +109,7 @@ void scd41_sample(i2c_master_dev_handle_t device, Controller& controller, Sensor
     Reading reading{};
     if (i2c_master_receive(device, bytes, sizeof bytes, 30) != ESP_OK) {
         controller.sensor_error(Quality::timeout);
+        restart_sensor(device, session);
     } else if (!decode_scd41(bytes, sizeof bytes, reading)) {
         controller.sensor_error(Quality::crc);
     } else {
@@ -112,6 +121,7 @@ pcnt_unit_handle_t tach_init() {
     pcnt_unit_config_t config{};
     config.high_limit = 30000;
     config.low_limit = -1;
+    config.flags.accum_count = true;
     pcnt_unit_handle_t unit = nullptr;
     if (pcnt_new_unit(&config, &unit) != ESP_OK) return nullptr;
     pcnt_chan_config_t channel_config{};
@@ -123,6 +133,8 @@ pcnt_unit_handle_t tach_init() {
     if (pcnt_new_channel(unit, &channel_config, &channel) != ESP_OK ||
         pcnt_channel_set_edge_action(channel, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD) != ESP_OK ||
         pcnt_unit_set_glitch_filter(unit, &filter) != ESP_OK ||
+        pcnt_unit_add_watch_point(unit, config.high_limit) != ESP_OK ||
+        pcnt_unit_add_watch_point(unit, config.low_limit) != ESP_OK ||
         pcnt_unit_enable(unit) != ESP_OK || pcnt_unit_clear_count(unit) != ESP_OK ||
         pcnt_unit_start(unit) != ESP_OK) return nullptr;
     return unit;
@@ -136,10 +148,8 @@ extern "C" void app_main() {
     if (gpio_set_direction(fan, GPIO_MODE_OUTPUT) != ESP_OK) return;
     auto tach = tach_init();
     auto sensor = sensor_init();
-    if (!tach) {
-        ESP_LOGE(tag, "Unable to initialize tachometer; output remains off.");
-        return;
-    }
+    const bool enabled = load_board_config() && tach && sensor;
+    if (!enabled) ESP_LOGW(tag, "Actuator locked: check commissioning, tachometer and sensor interface.");
     if (sensor) {
         send_command(sensor, 0x3f86);
         vTaskDelay(pdMS_TO_TICKS(550));
@@ -147,8 +157,10 @@ extern "C" void app_main() {
     SensorSession sensor_session{sensor && send_command(sensor, 0x21b1), monotonic_ms()};
     auto frames = xQueueCreate(1, sizeof(Frame));
     start_network(frames);
-    Controller controller;
+    Controller controller(enabled);
     uint64_t sequence = 0;
+    uint32_t last_count = 0;
+    bool fan_on = false;
     uint64_t last_window = monotonic_ms();
     uint64_t next_sample = last_window + 1000;
     uint64_t next_frame = last_window;
@@ -161,20 +173,29 @@ extern "C" void app_main() {
         const auto now = monotonic_ms();
         unsigned pulses = 0;
         uint64_t window_ms = 0;
-        if (now - last_window >= 1000) {
-            window_ms = now - last_window;
+        if (tach && now - last_window >= 1000) {
             int count = 0;
-            if (pcnt_unit_get_count(tach, &count) == ESP_OK && pcnt_unit_clear_count(tach) == ESP_OK && count > 0) {
-                pulses = static_cast<unsigned>(count);
+            if (pcnt_unit_get_count(tach, &count) == ESP_OK) {
+                window_ms = now - last_window;
+                pulses = static_cast<uint32_t>(count) - last_count;
+                last_count = static_cast<uint32_t>(count);
+                last_window = now;
             }
-            last_window = now;
         }
         controller.tick(now, pulses, window_ms);
         const auto snapshot = controller.snapshot(now);
-        gpio_set_level(fan, snapshot.fan_on);
+        if (snapshot.fan_on != fan_on) {
+            int count = 0;
+            if (tach && pcnt_unit_get_count(tach, &count) == ESP_OK) {
+                last_count = static_cast<uint32_t>(count);
+                last_window = now;
+            }
+            fan_on = snapshot.fan_on;
+            gpio_set_level(fan, fan_on);
+        }
         if (now >= next_frame) {
             if (frames) {
-                const Frame frame{snapshot, now, sequence++, epoch_ms()};
+                const Frame frame{snapshot, now, sequence++, epoch_ms(), enabled};
                 xQueueOverwrite(frames, &frame);
             }
             ESP_LOGI(tag, "CO2=%d, %s, fan=%s, rpm=%d%s", snapshot.has_reading ? snapshot.reading.co2 : -1,

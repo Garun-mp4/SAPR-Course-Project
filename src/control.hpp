@@ -28,12 +28,14 @@ bool decode_scd41_word(const uint8_t* bytes, uint16_t& value);
 
 class Controller {
 public:
+    explicit Controller(bool commissioned = false) : commissioned_(commissioned) {}
     void read(uint64_t now, Reading reading);
     void sensor_error(Quality quality);
     void tick(uint64_t now, unsigned pulses, uint64_t window_ms);
     Snapshot snapshot(uint64_t now) const;
 
 private:
+    bool commissioned_;
     Snapshot state_{};
     uint64_t last_good_at_ = 0;
     uint64_t enabled_at_ = 0;

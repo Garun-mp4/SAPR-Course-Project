@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     const std::string boot = "sapr-sim-" + std::to_string(random()) + "-" + std::to_string(random());
     const auto epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    Controller controller;
+    Controller controller(true);  // Enables the virtual output, never the physical one.
     uint64_t sequence = 0;
     for (uint64_t now = 0; now <= 305000; now += 1000) {
         const int ppm = now < 5000 ? 700 : now < 10000 ? 1050 : now < 15000 ? 900 : 750;
@@ -39,8 +39,9 @@ int main(int argc, char** argv) {
         if (now == 0 || now == 5000 || now == 6000 || now == 10000 ||
             now == 15000 || now == 304000 || now == 305000) {
             const auto current = controller.snapshot(now);
-            // Host time is real UTC, while controller uptime advances deterministically.
-            std::cout << telemetry_json({current, now, sequence++, epoch}, boot, Source::simulator) << '\n';
+            // Keep the local trace on one virtual UTC timeline. The demo maps it to a short wire timeline.
+            std::cout << telemetry_json({current, now, sequence++, epoch - 305000 + static_cast<int64_t>(now)},
+                                        boot, Source::simulator) << '\n';
         }
     }
 }

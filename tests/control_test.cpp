@@ -13,7 +13,11 @@ void check(bool condition, const char* explanation) {
 }
 
 int main() {
-    Controller controller;
+    Controller uncommissioned;
+    uncommissioned.read(0, {1200, 22.5, 45});
+    uncommissioned.tick(0, 0, 0);
+    check(!uncommissioned.snapshot(0).fan_on, "A valid reading cannot commission the output");
+    Controller controller(true);
     controller.tick(0, 0, 0);
     check(!controller.snapshot(0).fan_on, "Warmup must keep fan off");
     controller.read(1, {999, 22.5, 45});
@@ -33,7 +37,7 @@ int main() {
     controller.tick(301002, 60, 1000);
     check(!controller.snapshot(301002).fan_on, "799 ppm must stop a fan after minimum runtime");
 
-    Controller sensor;
+    Controller sensor(true);
     sensor.read(0, {1050, 22, 45});
     sensor.tick(0, 0, 0);
     for (uint64_t now = 1000; now <= stale_ms; now += 1000) sensor.tick(now, 60, 1000);
@@ -53,11 +57,12 @@ int main() {
     sensor.read(25000, {0, 22, 45});
     check(sensor.snapshot(25000).quality == Quality::range, "Invalid CO2 must be rejected");
 
-    Controller tach;
+    Controller tach(true);
     tach.read(0, {1050, 22, 45});
     tach.tick(0, 0, 0);
-    tach.tick(tach_timeout_ms - 1, 0, 1000);
+    tach.tick(tach_timeout_ms - 1, 1200, 1000);
     check(tach.snapshot(tach_timeout_ms - 1).fan_on, "Startup grace must be available");
+    check(tach.snapshot(tach_timeout_ms - 1).rpm == -1, "Glitches cannot confirm rotation");
     tach.tick(tach_timeout_ms, 0, 1000);
     check(tach.snapshot(tach_timeout_ms).fan_fault && !tach.snapshot(tach_timeout_ms).fan_on,
           "Missing tachometer pulses must latch a fault");

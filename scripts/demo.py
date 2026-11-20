@@ -2,11 +2,13 @@
 """Run the shared C++ controller and optionally post its frames to the AirCheck API."""
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import socket
 import subprocess
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -46,6 +48,24 @@ def state(frame):
     fan = frame["actuators"]["exhaust"]
     return (sensor["values"]["co2"], sensor["status"], fan["requested_on"], fan["rpm"], fan["status"])
 
+def iso_ms(milliseconds):
+    return datetime.fromtimestamp(milliseconds / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def wire_timeline(runs, origin):
+    # Virtual uptime remains unchanged. UTC and measurement age share a compressed,
+    # increasing timeline that respects AirCheck's future-time limit.
+    for index, frames in enumerate(runs.values()):
+        start = origin + index * 400
+        for elapsed, frame in frames.items():
+            sensor = frame["sensors"][0]
+            sampled = start + elapsed // 1000
+            frame["sampled_at"] = iso_ms(sampled)
+            if sensor["last_good_at"] is not None:
+                measured = start + (elapsed - sensor["age_ms"]) // 1000
+                sensor["age_ms"] = sampled - measured
+                sensor["last_good_at"] = iso_ms(measured)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -56,6 +76,10 @@ def main():
     command = ["wsl", "-d", "Ubuntu", "--", "./build/sapr-simulator"] if args.wsl else ["./build/sapr-simulator"]
 
     runs = {name: run_scenario(command, name, root) for name in ("normal", "sensor", "tach", "network")}
+    require(runs["sensor"][5000]["sensors"][0]["last_good_at"] == runs["sensor"][10000]["sensors"][0]["last_good_at"],
+            "A sensor timeout must preserve the original measurement time")
+    require(all([f["sampled_at"] for f in frames.values()] == sorted({f["sampled_at"] for f in frames.values()})
+                for frames in runs.values()), "The virtual timeline must be strictly increasing")
     normal = runs["normal"]
     expected = {
         0: (700, "ok", False, None, "unknown"),
@@ -89,6 +113,15 @@ def main():
     require(len(token) >= 32, "Set SAPR_DEVICE_TOKEN in the local environment")
     endpoint = args.url.rstrip("/") + "/api/v1/telemetry"
 
+    status, snapshot = send(endpoint, token)
+    require(status == 200, f"AirCheck initial GET returned {status}")
+    origin_ms = time.time_ns() // 1_000_000 - 1500
+    previous = (snapshot["data"] or {}).get("frame", {}).get("sampled_at")
+    if previous:
+        origin_ms = max(origin_ms, int(datetime.fromisoformat(previous).timestamp() * 1000) + 1)
+    require(origin_ms + 1505 < time.time_ns() // 1_000_000 + 4500,
+            "Wait for the previously published simulated timestamp to pass")
+    wire_timeline(runs, origin_ms)
     first = normal[0]
     status, _ = send(endpoint, token + "-invalid", first)
     require(status in (401, 403), f"Invalid token returned {status}")
@@ -97,6 +130,9 @@ def main():
     status, duplicate = send(endpoint, token, first)
     require(status == 200 and duplicate["data"]["duplicate"] and duplicate["data"]["id"] == payload["data"]["id"],
             "Duplicate POST must keep its original record")
+    changed = {**first, "controller": {**first["controller"], "dropped_packets": 1}}
+    status, _ = send(endpoint, token, changed)
+    require(status == 409, "A conflicting duplicate must be rejected")
 
     def deliver(frame):
         status, result = send(endpoint, token, frame)

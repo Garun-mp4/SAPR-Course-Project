@@ -1,6 +1,5 @@
 #include "telemetry.hpp"
 #include "profile.hpp"
-#include <chrono>
 #include <cstdio>
 #include <ctime>
 #include <iomanip>
@@ -53,9 +52,9 @@ std::string telemetry_json(const Frame& frame, const std::string& boot_id, Sourc
         << R"({"sensor_id":"indoor_particles","status":"unknown","reason":"not_installed","last_good_at":null,"age_ms":0,"consecutive_failures":0,"values":{"pm25":null}},)"
         << R"({"sensor_id":"outdoor_particles","status":"unknown","reason":"not_installed","last_good_at":null,"age_ms":0,"consecutive_failures":0,"values":{"pm25":null}}],)"
         << R"("controller":{"uptime_ms":)" << frame.uptime_ms
-        << R"(,"reset_reason":null,"firmware_version":"sapr-1.0.0","free_heap":null,"minimum_free_heap":null,"clock_synced":)"
-        << (frame.epoch_ms > 0) << R"(,"outputs_commissioned":)" << (source == Source::real)
-        << R"(,"dropped_packets":0,"queue_depth":0},"actuators":{)"
+        << R"(,"reset_reason":null,"firmware_version":"sapr-2.0.0","free_heap":null,"minimum_free_heap":null,"clock_synced":)"
+        << (frame.epoch_ms > 0) << R"(,"outputs_commissioned":)" << frame.outputs_commissioned
+        << R"(,"dropped_packets":)" << frame.dropped_packets << R"(,"queue_depth":0},"actuators":{)"
         << R"("window":{"open_limit":false,"close_limit":false,"position_percent":null,"position_quality":"unknown","motion":"stopped"},)"
         << R"("intake":{"requested_on":false,"rpm":null,"status":"unknown"},"exhaust":{"requested_on":)"
         << s.fan_on << R"(,"rpm":)";

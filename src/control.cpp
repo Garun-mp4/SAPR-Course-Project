@@ -63,22 +63,30 @@ void Controller::tick(uint64_t now, unsigned pulses, uint64_t window_ms) {
     if (state_.quality == Quality::ok && now - last_good_at_ >= stale_ms) {
         sensor_error(Quality::stale);
     }
+    if (!commissioned_ || state_.quality != Quality::ok) {
+        state_.fan_on = false;
+        state_.rpm = -1;
+        return;
+    }
     if (state_.fan_on) {
-        if (pulses > 0 && window_ms > 0) {
-            last_tach_at_ = now;
-            state_.rpm = static_cast<int>(60000ULL * pulses / (window_ms * pulses_per_revolution));
-        } else if (window_ms > 0) {
-            state_.rpm = -1;
+        if (window_ms != 0) {
+            const auto rpm = 60000ULL * pulses / (window_ms * pulses_per_revolution);
+            if (rpm >= tach_min_rpm && rpm <= tach_max_rpm) {
+                last_tach_at_ = now;
+                state_.rpm = static_cast<int>(rpm);
+            } else {
+                state_.rpm = -1;
+            }
         }
         if (now - last_tach_at_ >= tach_timeout_ms) state_.fan_fault = true;
-        if (state_.fan_fault || state_.quality != Quality::ok ||
+        if (state_.fan_fault ||
             (state_.reading.co2 < off_below_ppm && now - enabled_at_ >= minimum_run_ms)) {
             state_.fan_on = false;
             state_.rpm = -1;
         }
         return;
     }
-    if (!state_.fan_fault && state_.quality == Quality::ok && state_.reading.co2 >= on_ppm) {
+    if (!state_.fan_fault && state_.reading.co2 >= on_ppm) {
         enabled_at_ = last_tach_at_ = now;
         state_.fan_on = true;
     }

@@ -1,0 +1,10 @@
+{
+  "commissioned": false,
+  "connection": {
+    "ssid": "",
+    "password": "",
+    "server": "https://aircheck.example",
+    "token": "",
+    "ca_file": "root-ca.pem"
+  }
+}
