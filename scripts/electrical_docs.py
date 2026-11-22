@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def kicad_worksheet():
-    items = frame(420, 297, "САПР.001.000 Э3", "Контроллер вентиляции\nСхема электрическая\nпринципиальная")
+    items = frame(420, 297, "САПР.001.000 Э3", "Контроллер вентиляции\nСхема электрическая\nпринципиальная",
+                  version="03")
     with (ROOT / "hardware/SAPR-001-ESKD.kicad_wks").open("w", encoding="utf-8", newline="\n") as f:
         f.write("(kicad_wks (version 20231118) (generator sapr_eskd)\n")
         f.write("  (setup (textsize 1.8 1.8) (linewidth 0.25) (textlinewidth 0.175)"
@@ -37,7 +38,7 @@ def kicad_worksheet():
 def table_pdf(destination, code, name, widths, headers, records, notes, *, row_height=12, category_column=None):
     canvas = Canvas(str(destination), (210 * mm, 297 * mm), invariant=True)
     canvas.setTitle(code)
-    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4"))
+    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4", version="03"))
     start, top = 20, 292
     heights = [15] + [row_height] * len(records)
     bottom = top - sum(heights)
@@ -96,14 +97,20 @@ def read_bom():
 
 def pe3():
     bom = read_bom()
-    comments = {"A1":"WROOM-32E, 4 МБ", "A2":"I²C 3,3 В, питание LDO", "A3":"Mini SV, OFF", "C1":"Полярный", "F1":"С держателем",
-                "M1":"Внешний, 12 В, 0,07 А", "R1":"Подтяжка тахометра", "R2":"Подтяжка входа ON",
-                "VD1":"TVS входа 12 В", "VD2":"Диод Шоттки", "X1":"12 В, 1 А", "X2":"1 GND, 2 +12 В\n3 TACH"}
+    comments = {
+        "A1": "WROOM-32E, 4 МБ", "A2": "I²C 3,3 В, питание LDO", "A3": "Mini SV, OFF",
+        "C1": "±20 %, полярный", "F1": "T 0,5 А, 5×20",
+        "G1": "Внешний, 12 В ±5 %", "G2": "Внешний, Micro-USB",
+        "M1": "Внешний, 12 В, 0,07 А", "R1": "Подтяжка тахометра", "R2": "Подтяжка входа ON",
+        "VD1": "Однонаправленный", "VD2": "Диод Шоттки", "X1": "1 +12 В, 2 GND", "X2": "1 GND, 2 +12 В\n3 TACH",
+    }
+    if set(comments) != set(bom):
+        raise ValueError("Element list differs from BOM")
     records = [(ref, bom[ref]["Наименование"], bom[ref]["Кол-во"], note)
                for ref, note in sorted(comments.items(), key=lambda item: re.split(r"(\d+)", item[0]))]
     table_pdf(ROOT / "hardware/SAPR-001-PE3.pdf", "САПР.001.000 ПЭ3", "Контроллер вентиляции\nПеречень элементов",
               (20,110,10,45), ("Поз.\nобозначение", "Наименование", "Кол.", "Примечание"), records,
-              ("К схеме САПР.001.000 Э3.", "Подключение внешних источников приведено в таблице монтажа."))
+              ("К схеме САПР.001.000 Э3. Исполнение ответных частей и кабелей — в таблице монтажа.",))
 
 
 def specification():
@@ -112,16 +119,16 @@ def specification():
         ("A1", "ESP32-DevKitC-32E V4", "Espressif"),
         ("A2", "SCD41 №5190", "Adafruit"),
         ("A3", "Mini MOSFET Switch SV №2811", "Pololu"),
-        ("C1", "Конденсатор 47 мкФ, 25 В", ""),
-        ("VD1", "Ограничитель SMAJ12A", ""),
+        ("C1", "Конденсатор 47 мкФ, 25 В, ±20 %", ""),
+        ("VD1", "Ограничитель SMAJ13A", ""),
         ("VD2", "Диод Шоттки SS14", ""),
-        ("F1", "Предохранитель T 0,5 А, держ.", ""),
-        ("X1", "Разъём DC 12 В, 1 А", ""),
-        ("X2", "Разъём вентилятора, 3 контакта", ""),
-        ("R1", "Резистор 4,7 кОм", ""),
-        ("R2", "Резистор 10 кОм", ""),
+        ("F1", "0218.500MXP с держателем", ""),
+        ("X1", "JST SMR-02V-B с контактами", ""),
+        ("X2", "PC fan, 3 контакта, шаг 2,54 мм", ""),
+        ("R1", "4,7 кОм ±5 %, 0,25 Вт", ""),
+        ("R2", "10 кОм ±5 %, 0,25 Вт", ""),
     ]
-    if {ref for ref, _, _ in purchases} != set(bom) - {"M1", "PS1", "PS2"}:
+    if {ref for ref, _, _ in purchases} != set(bom) - {"M1", "G1", "G2"}:
         raise ValueError("Purchases differ from the internal BOM")
     records = [
         ("","","","","Документация","",""),
@@ -144,7 +151,7 @@ def specification():
     ]
     table_pdf(ROOT / "outputs/SAPR-001-specification.pdf", "САПР.001.000", "Контроллер вентиляции\nСпецификация",
               (6,6,8,70,63,10,22), ("Формат", "Зона", "Поз.", "Обозначение", "Наименование", "Кол.", "Примечание"), records,
-              ("Внешние устройства по Э3 и таблице монтажа. M1, источники 12 В и USB, USB-кабель.",),
+              ("Внешние устройства G1, G2 и M1 подключаются по Э3 и таблице монтажа.",),
               row_height=8, category_column=4)
 
 

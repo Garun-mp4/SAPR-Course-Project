@@ -36,7 +36,7 @@
   (line (name "L34") (start 385 247 ltcorner) (end 385 232 ltcorner) (linewidth 0.25))
   (line (name "L35") (start 385 237 ltcorner) (end 395 237 ltcorner) (linewidth 0.25))
   (tbtext "Вер." (name "T36") (pos 390 234.6 ltcorner) (font (size 1.386 1.8)) (justify center))
-  (tbtext "02" (name "T37") (pos 390 242.45 ltcorner) (font (size 1.925 2.5)) (justify center))
+  (tbtext "03" (name "T37") (pos 390 242.45 ltcorner) (font (size 1.925 2.5)) (justify center))
   (tbtext "САПР.001.000 Э3" (name "T38") (pos 330 240.2 ltcorner) (font (size 3.85 5)) (justify center))
   (line (name "L39") (start 345 287 ltcorner) (end 345 247 ltcorner) (linewidth 0.25))
   (line (name "L40") (start 275 272 ltcorner) (end 395 272 ltcorner) (linewidth 0.25))

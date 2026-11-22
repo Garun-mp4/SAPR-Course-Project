@@ -84,3 +84,13 @@ python scripts/check-profile.py build/electrical-netlist.xml
 ```
 
 Для повторного выпуска печатных листов нужны ReportLab и шрифт ГОСТ типа Б (`GOST_BU.ttf`). На настроенной машине запустить `python scripts/electrical_docs.py` и `python scripts/drawings.py`. Исходник Э3 открывается в KiCad с рамкой `hardware/SAPR-001-ESKD.kicad_wks`. Для печати PDF выбрать масштаб 100%. DWG сохранён в AC1032 в миллиметрах. [Аудит CAD](outputs/cad-audit.json)
+
+## Выпуск Э3, версия 03
+
+После генерации рамки и ПЭ3 из каталога проекта экспортировать Э3 из KiCad 9.0.8. Шрифт `GOST Type BU` должен быть доступен среде, где работает KiCad. Второй скрипт удаляет JavaScript экспорта и восстанавливает поиск по кириллице без изменения печатной графики. [Ревизия Э3 и критерии приёмки](tests/review-E3-R03.md)
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install pypdf==7.1.1
+wsl -d Ubuntu -- kicad-cli sch export pdf --black-and-white --exclude-pdf-property-popups --exclude-pdf-hierarchical-links --default-font 'GOST Type BU' --drawing-sheet hardware/SAPR-001-ESKD.kicad_wks -o build/e3-raw.pdf hardware/SAPR-001-E3.kicad_sch
+.\.venv\Scripts\python.exe scripts/finalize-e3-pdf.py build/e3-raw.pdf hardware/SAPR-001-E3.pdf
+```

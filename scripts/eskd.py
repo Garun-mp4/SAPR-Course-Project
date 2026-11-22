@@ -18,7 +18,7 @@ def font_size(height):
     return height * mm * 1000 / pdfmetrics.getFont(FONT_NAME).face.capHeight
 
 
-def frame(width, height, designation, name, *, material="", scale="", form=1, paper="А3"):
+def frame(width, height, designation, name, *, material="", scale="", form=1, paper="А3", version="02"):
     """Yield immutable page items in mm from the lower-left corner."""
     items = []
 
@@ -58,7 +58,7 @@ def frame(width, height, designation, name, *, material="", scale="", form=1, pa
     line(x + 175, y + id_base, x + 175, y + h)
     line(x + 175, y + h - 5, x + 185, y + h - 5)
     text(x + 180, y + h - 3.5, "Вер.", 1.8)
-    text(x + 180, y + id_base + 3.3, "02", 2.5)
+    text(x + 180, y + id_base + 3.3, version, 2.5)
     text(x + 120, y + id_base + 4.3, designation, 5)
     line(x + 135, y, x + 135, y + id_base)
     name_lines = name.split("\n")

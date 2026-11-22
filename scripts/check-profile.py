@@ -39,33 +39,61 @@ def main():
         match = re.search(rf"\b{name}\s*=\s*(0x[0-9a-fA-F]+|[0-9]+)\s*;", header)
         require(match and int(match[1], 0) == value, f"Firmware constant mismatch: {name}")
 
+    exported = ElementTree.parse(args.netlist)
     nets = {
         net.attrib["name"].lstrip("/"): {(node.attrib["ref"], node.attrib["pin"]) for node in net.findall("node")}
-        for net in ElementTree.parse(args.netlist).findall("./nets/net")
+        for net in exported.findall("./nets/net")
     }
     expected = {
         "SDA": {("A1", str(constants["sda_gpio"])), ("A2", "SDA")},
         "SCL": {("A1", str(constants["scl_gpio"])), ("A2", "SCL")},
         "FAN_EN": {("A1", str(constants["enable_gpio"])), ("A3", "ON"), ("R2", "1")},
-        "TACH": {("A1", str(constants["tach_gpio"])), ("M1", "3"), ("X2", "3"), ("R1", "2")},
+        "TACH": {("A1", str(constants["tach_gpio"])), ("X2", "3"), ("R1", "2")},
         "3V3": {("A1", "3V3"), ("R1", "1")},
+        "USB_VBUS": {("G2", "+"), ("A1", "J1.1")},
+        "USB_RETURN": {("G2", "-"), ("A1", "J1.5")},
         "USB_5V_D": {("A1", "5V"), ("A2", "VIN")},
+        "G1_PLUS": {("G1", "+"), ("X1", "1S")},
+        "G1_RETURN": {("G1", "-"), ("X1", "2S")},
         "12V_IN": {("X1", "1"), ("F1", "1")},
         "12V_FUSED": {("F1", "2"), ("A3", "VIN"), ("C1", "2"), ("VD1", "2")},
-        "FAN_12V": {("A3", "VOUT"), ("M1", "2"), ("X2", "2"), ("VD2", "2")},
-        "GND": {("A1", "GND"), ("A2", "GND"), ("A3", "GND"), ("M1", "1"), ("X1", "2"), ("X2", "1"),
+        "FAN_12V": {("A3", "VOUT"), ("X2", "2"), ("VD2", "2")},
+        "M1_RETURN": {("X2", "1M"), ("M1", "1")},
+        "M1_PLUS": {("X2", "2M"), ("M1", "2")},
+        "M1_TACH": {("X2", "3M"), ("M1", "3")},
+        "GND": {("A1", "GND"), ("A2", "GND"), ("A3", "GND"), ("X1", "2"), ("X2", "1"),
                 ("C1", "1"), ("R2", "2"), ("VD2", "1"), ("VD1", "1")},
     }
     require(nets == expected, "KiCad netlist differs from the reviewed wiring.")
     with (ROOT / "hardware/bom.csv").open(encoding="utf-8", newline="") as source:
-        bom_refs = [row["Обозначение"] for row in csv.DictReader(source)]
-    require(len(bom_refs) == len(set(bom_refs)), "Duplicate reference in BOM.")
-    require({ref for nodes in expected.values() for ref, _ in nodes} == set(bom_refs) - {"PS1", "PS2"},
-            "BOM references differ from the netlist.")
+        bom_rows = list(csv.DictReader(source))
+    bom = {row["Обозначение"]: row for row in bom_rows}
+    values = {item.attrib["ref"]: item.findtext("value") for item in exported.findall("./components/comp")}
+    require(len(bom) == len(bom_rows), "Duplicate reference in BOM.")
+    require(set(bom) == set(values) == {ref for nodes in expected.values() for ref, _ in nodes},
+            "BOM references differ from the schematic or netlist.")
+    part_marking = {
+        "A1": ("ESP32-DevKitC-32E V4", "ESP32-DevKitC-32E V4"),
+        "A2": ("5190", "5190"), "A3": ("2811", "2811"),
+        "C1": ("47 мкФ, 25 В", "47 мкФ 25 В ±20 %"), "F1": ("T 0,5 А", "0218.500MXP"),
+        "G1": ("12 В ±5 %, 1 А", "12 В ±5 % 1 А"), "G2": ("5 В, 2 А", "5 В 2 А"),
+        "M1": ("NF-A8 FLX", "NF-A8 FLX"), "R1": ("4,7 кОм", "4,7 кОм ±5 % 0,25 Вт"),
+        "R2": ("10 кОм", "10 кОм ±5 % 0,25 Вт"),
+        "VD1": ("SMAJ13A", "SMAJ13A"), "VD2": ("SS14", "SS14"),
+        "X1": ("JST SM", "SMR-02V-B"), "X2": ("3 конт.", "PC fan 3 контакта"),
+    }
+    for ref, (schematic_value, bom_value) in part_marking.items():
+        require(schematic_value in values[ref] and bom_value in bom[ref]["Наименование"] and bom[ref]["Кол-во"] == "1",
+                f"Incorrect component value, part number or quantity: {ref}")
     with (ROOT / "hardware/connections.csv").open(encoding="utf-8", newline="") as source:
-        documented_nets = {row["Цепь"] for row in csv.DictReader(source)}
-    require(documented_nets - {"USB_5V", "FAN_GND"} == set(nets),
-            "Wiring table net names differ from the netlist.")
+        connections = list(csv.DictReader(source))
+    documented_nets = {
+        row["Цепь"]: {tuple(endpoint.split(":", 1))
+                      for key in ("Откуда", "Куда") for endpoint in row[key].split(" / ")}
+        for row in connections
+    }
+    require(len(documented_nets) == len(connections), "Duplicate net in wiring table.")
+    require(documented_nets == nets, "Wiring table endpoints differ from the netlist.")
 
     audit = json.loads((ROOT / "outputs/cad-audit.json").read_text(encoding="utf-8"))
     box = profile["enclosure_mm"]
