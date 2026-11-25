@@ -1,5 +1,5 @@
 (kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") (uuid "0ab47cb0-30a3-4e09-89fe-19b0d4e1952a") (paper "A3")
-(title_block (title "САПР.001.000 Э3. Контроллер вентиляции") (rev "03"))
+(title_block (title "САПР.001.000 Э3. Контроллер вентиляции") (rev "04"))
 (lib_symbols
 (symbol "SAPR:DevKitC" (pin_names (offset 1.25)) (pin_numbers (hide yes)) (in_bom yes) (on_board yes)
   (property "Reference" "A" (at 0.0000 12.7000 0) (effects (font (size 2.0 2.0))))
@@ -185,7 +185,7 @@
 (text "5" (at 111.7600 90.1700 0) (effects (font (size 1.8 1.8))) (uuid "44620493-c830-59d0-8279-8c70fafca507"))
 (symbol (lib_id "SAPR:R") (at 95.2500 113.0300 270) (unit 1) (in_bom yes) (on_board yes) (dnp no) (uuid "6905db69-08dc-5e26-b63b-a949e8c3a69f")
   (property "Reference" "R1" (at 100.3300 111.7600 90) (effects (font (size 2.5 2.5)) (justify left)))
-  (property "Value" "4,7 кОм" (at 100.3300 115.5700 90) (effects (font (size 2.0 2.0)) (justify left)))
+  (property "Value" "2,2 кОм" (at 100.3300 115.5700 90) (effects (font (size 2.0 2.0)) (justify left)))
   (pin "1" (uuid "26d57c46-ae6d-5bd9-ab25-14b127a7ef44")) (pin "2" (uuid "658a3e41-9b44-5a42-8561-beb32c5b6ba1"))
   (instances (project "SAPR-001-E3" (path "/0ab47cb0-30a3-4e09-89fe-19b0d4e1952a" (reference "R1") (unit 1)))))
 (wire (pts (xy 95.2500 106.6800) (xy 116.8400 106.6800)) (stroke (width 0.32) (type default)) (uuid "4a9f95e6-8aae-5826-94da-78f6c1b5c59d"))

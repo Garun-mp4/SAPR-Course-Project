@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def kicad_worksheet():
     items = frame(420, 297, "САПР.001.000 Э3", "Контроллер вентиляции\nСхема электрическая\nпринципиальная",
-                  version="03")
+                  version="04")
     with (ROOT / "hardware/SAPR-001-ESKD.kicad_wks").open("w", encoding="utf-8", newline="\n") as f:
         f.write("(kicad_wks (version 20231118) (generator sapr_eskd)\n")
         f.write("  (setup (textsize 1.8 1.8) (linewidth 0.25) (textlinewidth 0.175)"
@@ -38,7 +38,7 @@ def kicad_worksheet():
 def table_pdf(destination, code, name, widths, headers, records, notes, *, row_height=12, category_column=None):
     canvas = Canvas(str(destination), (210 * mm, 297 * mm), invariant=True)
     canvas.setTitle(code)
-    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4", version="03"))
+    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4", version="04"))
     start, top = 20, 292
     heights = [15] + [row_height] * len(records)
     bottom = top - sum(heights)
@@ -125,14 +125,14 @@ def specification():
         ("F1", "0218.500MXP с держателем", ""),
         ("X1", "JST SMR-02V-B с контактами", ""),
         ("X2", "PC fan, 3 контакта, шаг 2,54 мм", ""),
-        ("R1", "4,7 кОм ±5 %, 0,25 Вт", ""),
+        ("R1", "2,2 кОм ±5 %, 0,25 Вт", ""),
         ("R2", "10 кОм ±5 %, 0,25 Вт", ""),
     ]
     if {ref for ref, _, _ in purchases} != set(bom) - {"M1", "G1", "G2"}:
         raise ValueError("Purchases differ from the internal BOM")
     records = [
         ("","","","","Документация","",""),
-        ("А3","","","САПР.001.000 СБ","Сборочный чертёж","",""),
+        ("А3","","","САПР.001.000 СБ","Сборочный чертёж","", "4 листа"),
         ("А3","","","САПР.001.000 Э3","Схема электрическая\nпринципиальная","",""),
         ("А4","","","САПР.001.000 ПЭ3","Перечень элементов","",""),
         ("","","","","Детали","",""),
@@ -141,7 +141,7 @@ def specification():
         ("","","","","Программные изделия и базы данных","",""),
         ("","","","САПР.001-FW","Прошивка ESP32, редакция 02","1",""),
         ("","","","","Прочие изделия","",""),
-        ("","","3","","Винт для термопласта Ø3×12","4","Проба"),
+        ("","","3","","Винт STP390300120S, Ø3×12","4","Проба"),
         *(("", "", str(position), "", name, bom[ref]["Кол-во"], " ".join(filter(None, [ref, supplier])))
           for position, (ref, name, supplier) in enumerate(purchases, start=4)),
         ("","","15","","Втулка вывода жгута","2","По месту"),

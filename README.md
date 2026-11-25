@@ -85,11 +85,11 @@ wsl -d Ubuntu -- kicad-cli sch export netlist --format kicadxml -o build/electri
 python scripts/check-profile.py build/electrical-netlist.xml
 ```
 
-Для повторного выпуска печатных листов нужны ReportLab и шрифт ГОСТ типа Б (`GOST_BU.ttf`). На настроенной машине запустить `python scripts/electrical_docs.py` и `python scripts/drawings.py`. Исходник Э3 открывается в KiCad с рамкой `hardware/SAPR-001-ESKD.kicad_wks`. Для печати PDF выбрать масштаб 100%. DWG сохранён в AC1032 в миллиметрах. [Аудит CAD](outputs/cad-audit.json)
+Для повторного выпуска печатных листов нужны ReportLab и шрифт ГОСТ типа Б (`GOST_BU.ttf`). Запустить `python scripts/electrical_docs.py` и `python scripts/drawings.py`. Для подготовки редактируемых 2D-листов и обновления копий PDF/PNG после экспорта Э3 запустить `python scripts/drawing_exports.py --dxf build/SAPR-001-sheets.dxf` с установленными PyMuPDF и ezdxf. Полученный DXF открыть в OpenCAD Studio, проверить аудитом и сохранить в DWG AC1032. Для печати PDF выбрать масштаб 100%. [Комплект чертежей и сверка с 3D](Комплект%20проекта/Чертежи/README.md)
 
-## Выпуск Э3, версия 03
+## Выпуск Э3, версия 04
 
-После генерации рамки и ПЭ3 из каталога проекта экспортировать Э3 из KiCad 9.0.8. Шрифт `GOST Type BU` должен быть доступен среде, где работает KiCad. Второй скрипт удаляет JavaScript экспорта и восстанавливает поиск по кириллице без изменения печатной графики. [Ревизия Э3 и критерии приёмки](tests/review-E3-R03.md)
+После генерации рамки и ПЭ3 из каталога проекта экспортировать Э3 из KiCad 9.0.8. Шрифт `GOST Type BU` должен быть доступен среде, где работает KiCad. Второй скрипт удаляет JavaScript экспорта и восстанавливает поиск по кириллице без изменения печатной графики. В версии 04 номинал R1 уточнён по паспорту M1. [Электрические параметры и приёмка](hardware/design.md)
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install pypdf==7.1.1
