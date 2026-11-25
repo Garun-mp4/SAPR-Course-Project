@@ -17,6 +17,8 @@ WALL, FLOOR, LID = (H[key] for key in ("wall", "floor", "lid_thickness"))
 STUD, SLOT = H["studs"], H["lid_slots"]
 FUSE_AXIS = ((69, 8.5), (109, 34.11738))
 FUSE_DIAMETER = 11
+FUSE_AXIS_Z = 21
+SWITCH_TOP_Z = 8.416
 SENSOR_BOARD = (77.05, 49.07, 25.4, 22.86)
 SENSOR_BODY = (84.7, 56.212, 10.1, 10.1)
 SWITCH_BOARD = (73.5, 11, 15.24, 15.24)
@@ -151,7 +153,8 @@ class Sheet:
 
     def frame(self, code, name, material="", scale="2:1", sheet=1, sheets=1):
         pdf_frame(self.c, frame(420, 297, code, name, material=material, scale=scale,
-                                version="04", sheet=sheet, sheets=sheets))
+                                version="05" if code.endswith(" СБ") else "04",
+                                sheet=sheet, sheets=sheets))
 
     def trace(self, x, y, width, label):
         for a, b in ((x - 5, x), (x + width, x + width + 5)):
@@ -160,6 +163,46 @@ class Sheet:
             self.line(stop, y - 5, stop, y)
             self.arrow(stop, y, "up")
             self.text(stop - 0.5, y - 9, label, 3.5, centered=True)
+
+
+def corners(x, y, width, depth):
+    return ((x, y), (x + width, y), (x + width, y + depth), (x, y + depth))
+
+
+def fuse_corners():
+    (ax, ay), (bx, by) = FUSE_AXIS
+    length = hypot(bx - ax, by - ay)
+    radius = FUSE_DIAMETER / 2
+    nx, ny = -(by - ay) * radius / length, (bx - ax) * radius / length
+    return ((ax + nx, ay + ny), (bx + nx, by + ny),
+            (bx - nx, by - ny), (ax - nx, ay - ny))
+
+
+def visible_edges(rect, cover):
+    """Return portions of the rectangle's edges outside the clockwise cover."""
+    for start, stop in zip(rect, (*rect[1:], rect[0])):
+        lo, hi = 0.0, 1.0
+        for a, b in zip(cover, (*cover[1:], cover[0])):
+            # A point is inside when it is on the right of each cover edge.
+            u, v = b[0] - a[0], b[1] - a[1]
+            c0 = u * (a[1] - start[1]) - v * (a[0] - start[0])
+            c1 = u * (a[1] - stop[1]) - v * (a[0] - stop[0])
+            if max(c0, c1) < 0:
+                lo = hi
+                break
+            if min(c0, c1) < 0:
+                t = c0 / (c0 - c1)
+                if c0 < 0:
+                    lo = max(lo, t)
+                else:
+                    hi = min(hi, t)
+        if hi <= lo:
+            yield start, stop
+            continue
+        for a, b in ((0, lo), (hi, 1)):
+            if b > a:
+                yield tuple(p + a * (q - p) for p, q in zip(start, stop)), tuple(
+                    p + b * (q - p) for p, q in zip(start, stop))
 
 
 def plan(s, x, y, scale=2, kind="base"):
@@ -176,31 +219,34 @@ def plan(s, x, y, scale=2, kind="base"):
             s.rect(x + scale * SLOT["x"], y + scale * b, scale * SLOT["length"], scale * SLOT["width"])
         return
     s.rect(x + scale * WALL, y + scale * WALL, scale * (W - 2 * WALL), scale * (D - 2 * WALL))
+    assembly = kind == "assembly"
+    cover = fuse_corners() if assembly else ()
     for feature in H["supports"]:
         a, b, _ = feature["min"]
         c, d, _ = feature["max"]
-        s.rect(x + scale * a, y + scale * b, scale * (c - a), scale * (d - b), 0.35,
-               "hidden" if kind == "assembly" and feature["ref"] != "Перегородка" else "solid")
+        style = "hidden" if assembly and feature["ref"] != "Перегородка" else "solid"
+        if assembly and feature["ref"] == "A3":
+            for (a1, b1), (a2, b2) in visible_edges(corners(a, b, c - a, d - b), cover):
+                s.line(x + scale * a1, y + scale * b1, x + scale * a2, y + scale * b2, 0.25, style)
+        else:
+            s.rect(x + scale * a, y + scale * b, scale * (c - a), scale * (d - b), 0.35, style)
     for port in H["ports"]:
         a = 0 if port["side"] == "left" else W - WALL
         s.rect(x + scale * a, y + scale * port["y"], scale * WALL, scale * port["width"], 0.25, "hidden")
-    if kind != "assembly":
+    if not assembly:
         return
 
-    for a, b, w, h in (USB_BOARD, A1_MODULE, SENSOR_BOARD, SENSOR_BODY, SWITCH_BOARD,
-                        SWITCH_EXTENT, (0.4, 26, 8.1, 8), (18, 60.5, 10, 4.5),
+    for a, b, w, h in (USB_BOARD, A1_MODULE, SENSOR_BOARD, SENSOR_BODY,
+                        (0.4, 26, 8.1, 8), (18, 60.5, 10, 4.5),
                         (29.5, 60.5, 4.5, 4.5), (111, 8.5, 5, 17), (111, 27.5, 5, 15)):
         s.rect(x + scale * a, y + scale * b, scale * w, scale * h, 0.35)
     s.line(x + scale * 50.874, y + scale * 20.981, x + scale * 50.874,
            y + scale * 38.981, style="hidden")
-    (ax, ay), (bx, by) = FUSE_AXIS
-    radius = FUSE_DIAMETER / 2
-    length = hypot(bx - ax, by - ay)
-    nx, ny = -(by - ay) * radius / length, (bx - ax) * radius / length
-    corners = [(a + sign * nx, b + sign * ny)
-               for a, b, sign in ((ax, ay, 1), (bx, by, 1), (bx, by, -1), (ax, ay, -1))]
-    s.outline([(x + scale * a, y + scale * b) for a, b in corners], 0.35)
-    for a, b, label in ((14, 29, "A1"), (80.5, 64, "A2"), (79.5, 13, "A3")):
+    for outline in (SWITCH_BOARD, SWITCH_EXTENT):
+        for (a1, b1), (a2, b2) in visible_edges(corners(*outline), cover):
+            s.line(x + scale * a1, y + scale * b1, x + scale * a2, y + scale * b2, 0.35)
+    s.outline([(x + scale * a, y + scale * b) for a, b in cover], 0.5)
+    for a, b, label in ((14, 29, "A1"), (80.5, 64, "A2"), (76.75, 22.4, "A3")):
         s.text(x + scale * a, y + scale * b, label, centered=True)
 
 
@@ -397,6 +443,21 @@ def harness_installation(s):
     s.line(160, 93.5, 217.5, 93.5, 0.18, "center")
     s.hdim(165, 212.5, 81, 88, "47,5")
     s.vdim(88, 99, 223, 212.5, "Ø11")
+    s.text(295, 122, "F1 над платой A3", 3.5)
+    s.text(295, 114, "Вид справа, габариты (1:1)", 2.5)
+    x, y = 296, 75
+    ys = [p[1] for p in fuse_corners()]
+    bottom = FUSE_AXIS_Z - FUSE_DIAMETER / 2
+    s.rect(x + min(ys), y + bottom, max(ys) - min(ys), FUSE_DIAMETER, 0.35)
+    s.text(x + 19, y + FUSE_AXIS_Z - 1, "F1", centered=True)
+    _, by, _, depth = SWITCH_BOARD
+    switch_y = SWITCH_EXTENT[1]
+    s.rect(x + switch_y, y + 6, by + depth - switch_y, SWITCH_TOP_Z - 6, 0.35)
+    s.text(x + 18, y + 1, "A3", centered=True)
+    gap = bottom - SWITCH_TOP_Z
+    s.vdim(y + SWITCH_TOP_Z, y + bottom, x + max(ys) + 21, x + by + depth, mm_text(round(gap, 1)) + "*")
+    s.text(296, 67, "* Между корпусами по модели.", 2.5)
+    s.text(296, 63, "Боковой зазор до стенки проверить на образце.", 2.5)
 
 
 def main():
@@ -418,7 +479,7 @@ def main():
     s.text(x + 101, y + 148, "Вид сверху без крышки", 3.5, centered=True)
     s.leader(x + 80, y + 76, x + 91, y + 91, 4)
     s.leader(x + 168, y + 135, x + 154, y + 147, 5)
-    s.leader(x + 154, y + 36, x + 133, y + 55, 6)
+    s.leader(x + 147, y + 45, x + 126, y + 59, 6)
     s.leader(x + 186, y + 48, x + 192, y + 61, 10)
     s.leader(x + 224, y + 74, x + 235, y + 84, 15)
     side_view(s, 307, 217, "left", True)
@@ -431,6 +492,8 @@ def main():
         "5. Крышку закрепить винтами поз. 3. Щели над A2 оставить открытыми.",
         "6. Внешние устройства подключить по листу 2. На виде сверху показаны монтажные контуры.",
         "7. Проверить доступ к Micro-USB и F1, посадку крепежа и закрытие корпуса на собранном образце.",), 105)
+    s.notes(302, 107, "Положение держателя F1", (
+        "Поз. 10 расположена под углом в плане и выше платы A3. Зазор показан на листе 4.",), 105)
     s.text(48, 79, "А–А (1:1), по Y = 62 мм", 3.5)
     section(s, 48, 23, True)
     c.showPage()
