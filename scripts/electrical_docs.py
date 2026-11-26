@@ -35,12 +35,13 @@ def kicad_worksheet():
         f.write(")\n")
 
 
-def table_pdf(destination, code, name, widths, headers, records, notes, *, row_height=12, category_column=None):
+def table_pdf(destination, code, name, widths, headers, records, notes, *, row_height=12, category_column=None, version="04"):
     canvas = Canvas(str(destination), (210 * mm, 297 * mm), invariant=True)
     canvas.setTitle(code)
-    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4", version="04"))
+    pdf_frame(canvas, frame(210, 297, code, name, form=2, paper="А4", version=version))
     start, top = 20, 292
-    heights = [15] + [row_height] * len(records)
+    heights = [15] + [max(row_height, 2 + 4.4 * max(cell.count("\n") + 1 for cell in row))
+                      for row in records]
     bottom = top - sum(heights)
     if bottom - (8 + (len(notes) - 1) * 5 if notes else 0) < 48:
         raise ValueError(f"{destination.name}: table overlaps the main inscription")
@@ -106,11 +107,12 @@ def pe3():
     }
     if set(comments) != set(bom):
         raise ValueError("Element list differs from BOM")
-    records = [(ref, bom[ref]["Наименование"], bom[ref]["Кол-во"], note)
+    holder = {"F1": "\nДержатель Schurter FDI 8601.2001.08"}
+    records = [(ref, bom[ref]["Наименование"] + holder.get(ref, ""), bom[ref]["Кол-во"], note)
                for ref, note in sorted(comments.items(), key=lambda item: re.split(r"(\d+)", item[0]))]
     table_pdf(ROOT / "hardware/SAPR-001-PE3.pdf", "САПР.001.000 ПЭ3", "Контроллер вентиляции\nПеречень элементов",
               (20,110,10,45), ("Поз.\nобозначение", "Наименование", "Кол.", "Примечание"), records,
-              ("К схеме САПР.001.000 Э3. Исполнение ответных частей и кабелей — в таблице монтажа.",))
+              ("К схеме САПР.001.000 Э3. Исполнение ответных частей и кабелей — в таблице монтажа.",), version="05")
 
 
 def specification():
@@ -122,7 +124,7 @@ def specification():
         ("C1", "Конденсатор 47 мкФ, 25 В, ±20 %", ""),
         ("VD1", "Ограничитель SMAJ13A", ""),
         ("VD2", "Диод Шоттки SS14", ""),
-        ("F1", "0218.500MXP с держателем", ""),
+        ("F1", "0218.500MXP + держатель\nSchurter FDI 8601.2001.08", ""),
         ("X1", "JST SMR-02V-B с контактами", ""),
         ("X2", "PC fan, 3 контакта, шаг 2,54 мм", ""),
         ("R1", "2,2 кОм ±5 %, 0,25 Вт", ""),
@@ -152,7 +154,7 @@ def specification():
     table_pdf(ROOT / "outputs/SAPR-001-specification.pdf", "САПР.001.000", "Контроллер вентиляции\nСпецификация",
               (6,6,8,70,63,10,22), ("Формат", "Зона", "Поз.", "Обозначение", "Наименование", "Кол.", "Примечание"), records,
               ("Внешние устройства G1, G2 и M1 подключаются по Э3 и таблице монтажа.",),
-              row_height=8, category_column=4)
+              row_height=8, category_column=4, version="05")
 
 
 if __name__ == "__main__":

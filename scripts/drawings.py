@@ -1,7 +1,6 @@
 """Export the SAPR-001 drawing set from its checked mechanical profile."""
 import argparse
 import json
-from math import hypot
 from pathlib import Path
 
 from reportlab.lib.units import mm
@@ -15,10 +14,11 @@ H = json.loads((ROOT / "hardware/profile.json").read_text(encoding="utf-8"))["en
 W, D, B = (H[key] for key in ("length", "width", "base_height"))
 WALL, FLOOR, LID = (H[key] for key in ("wall", "floor", "lid_thickness"))
 STUD, SLOT = H["studs"], H["lid_slots"]
-FUSE_AXIS = ((69, 8.5), (109, 34.11738))
-FUSE_DIAMETER = 11
-FUSE_AXIS_Z = 21
-SWITCH_TOP_Z = 8.416
+FUSE_AXIS_X, FUSE_AXIS_Y, FUSE_AXIS_Z = 54, 13.5, 20.5
+FUSE_LENGTH, FUSE_DIAMETER = 48, 16
+FUSE_PROFILE = ((0, 2.2), (.6, 2.7), (7, 2.7), (9, 4.4), (15, 4.4),
+                (20, 5), (20, 7.7), (20.3, 8), (24.7, 8), (25, 7.7),
+                (25, 4.9), (46.4, 4.45), (FUSE_LENGTH, 3.3))
 SENSOR_BOARD = (77.05, 49.07, 25.4, 22.86)
 SENSOR_BODY = (84.7, 56.212, 10.1, 10.1)
 SWITCH_BOARD = (73.5, 11, 15.24, 15.24)
@@ -153,7 +153,7 @@ class Sheet:
 
     def frame(self, code, name, material="", scale="2:1", sheet=1, sheets=1):
         pdf_frame(self.c, frame(420, 297, code, name, material=material, scale=scale,
-                                version="05" if code.endswith(" СБ") else "04",
+                                version="06" if code.endswith(" СБ") else "04",
                                 sheet=sheet, sheets=sheets))
 
     def trace(self, x, y, width, label):
@@ -170,12 +170,9 @@ def corners(x, y, width, depth):
 
 
 def fuse_corners():
-    (ax, ay), (bx, by) = FUSE_AXIS
-    length = hypot(bx - ax, by - ay)
-    radius = FUSE_DIAMETER / 2
-    nx, ny = -(by - ay) * radius / length, (bx - ax) * radius / length
-    return ((ax + nx, ay + ny), (bx + nx, by + ny),
-            (bx - nx, by - ny), (ax - nx, ay - ny))
+    x0, x1 = FUSE_AXIS_X, FUSE_AXIS_X + FUSE_LENGTH
+    y0, y1 = FUSE_AXIS_Y - FUSE_DIAMETER / 2, FUSE_AXIS_Y + FUSE_DIAMETER / 2
+    return ((x0, y1), (x1, y1), (x1, y0), (x0, y0))
 
 
 def visible_edges(rect, cover):
@@ -237,15 +234,20 @@ def plan(s, x, y, scale=2, kind="base"):
         return
 
     for a, b, w, h in (USB_BOARD, A1_MODULE, SENSOR_BOARD, SENSOR_BODY,
-                        (0.4, 26, 8.1, 8), (18, 60.5, 10, 4.5),
-                        (29.5, 60.5, 4.5, 4.5), (111, 8.5, 5, 17), (111, 27.5, 5, 15)):
+                        (3.7, 26.3, 6.2, 7.45), (40.66, 49.75, 6.3, 2.5),
+                        (72.5, 30.65, 5, 2.7), (93, 27.65, 5, 2.7),
+                        (111, 8.5, 5, 17), (111, 27.5, 5, 15)):
         s.rect(x + scale * a, y + scale * b, scale * w, scale * h, 0.35)
+    s.circle(x + scale * 82.25, y + scale * 32, scale * 3.15, 0.35)
     s.line(x + scale * 50.874, y + scale * 20.981, x + scale * 50.874,
            y + scale * 38.981, style="hidden")
     for outline in (SWITCH_BOARD, SWITCH_EXTENT):
         for (a1, b1), (a2, b2) in visible_edges(corners(*outline), cover):
             s.line(x + scale * a1, y + scale * b1, x + scale * a2, y + scale * b2, 0.35)
-    s.outline([(x + scale * a, y + scale * b) for a, b in cover], 0.5)
+    s.outline([(x + scale * a, y + scale * b) for a, b in cover], 0.35)
+    s.line(x + scale * (FUSE_AXIS_X - 2), y + scale * FUSE_AXIS_Y,
+           x + scale * (FUSE_AXIS_X + FUSE_LENGTH + 2), y + scale * FUSE_AXIS_Y,
+           0.18, "center")
     for a, b, label in ((14, 29, "A1"), (80.5, 64, "A2"), (76.75, 22.4, "A3")):
         s.text(x + scale * a, y + scale * b, label, centered=True)
 
@@ -423,9 +425,9 @@ def harness_installation(s):
         "Посадочные проёмы 14 × 13 и 12 × 11. Габариты буртов по 3D — 17 × 16 и 15 × 14.",
         "Модельные проходы Ø5,3 и Ø5,5. Паз шириной 2,5 на стенку 3. Упругую посадку проверить на образце.",
         "Закрепить оба жгута от натяжения. Провода вести ниже Z = 30, оставляя свободными щели.",
-        "F1 — закрытый держатель 5 × 20; запас места по 3D Ø11 × 47,5. Крепить в плюсовой ветви X1.",
+        "F1 — держатель Schurter FDI 8601.2001.08 со вставкой 5 × 20 в плюсовой ветви X1.",
         "C1 и VD1 включить короткими проводами у A3:VIN, VD2 — у A3:VOUT. R1 и R2 — по Э3.",
-        "Длины жгутов определить по месту при доступе к разъёмам и предохранителю.",), 120)
+        "Держатель закрепить съёмной изоляционной лентой у передней стенки. Оставить запас проводов для замены вставки.",), 120)
     s.notes(295, 250, "X1 · JST SM, шаг 2,50", (
         "Контроллер — SMR-02V-B, источник — SMP-02V-BC.",
         "Контакт 1 — +12 В, контакт 2 — GND.",
@@ -438,26 +440,33 @@ def harness_installation(s):
     s.notes(32, 92, "Компоненты в жгуте", (
         "R1, R2: осевые DIN0207; C1: радиальный Ø6,3; VD1 и VD2: SMA.",
         "Габариты справочные. Номиналы и полярность — по Э3 и ПЭ3.",), 110)
-    s.text(165, 108, "Габарит держателя F1 (1:1)", 3.5)
-    s.rect(165, 88, 47.5, 11, 0.35)
-    s.line(160, 93.5, 217.5, 93.5, 0.18, "center")
-    s.hdim(165, 212.5, 81, 88, "47,5")
-    s.vdim(88, 99, 223, 212.5, "Ø11")
-    s.text(295, 122, "F1 над платой A3", 3.5)
-    s.text(295, 114, "Вид справа, габариты (1:1)", 2.5)
-    x, y = 296, 75
-    ys = [p[1] for p in fuse_corners()]
-    bottom = FUSE_AXIS_Z - FUSE_DIAMETER / 2
-    s.rect(x + min(ys), y + bottom, max(ys) - min(ys), FUSE_DIAMETER, 0.35)
-    s.text(x + 19, y + FUSE_AXIS_Z - 1, "F1", centered=True)
-    _, by, _, depth = SWITCH_BOARD
-    switch_y = SWITCH_EXTENT[1]
-    s.rect(x + switch_y, y + 6, by + depth - switch_y, SWITCH_TOP_Z - 6, 0.35)
-    s.text(x + 18, y + 1, "A3", centered=True)
-    gap = bottom - SWITCH_TOP_Z
-    s.vdim(y + SWITCH_TOP_Z, y + bottom, x + max(ys) + 21, x + by + depth, mm_text(round(gap, 1)) + "*")
-    s.text(296, 67, "* Между корпусами по модели.", 2.5)
-    s.text(296, 63, "Боковой зазор до стенки проверить на образце.", 2.5)
+    s.notes(32, 65, "Укладка внутренних цепей", (
+        "C1 и VD1 расположить у A3:VIN, VD2 — у A3:VOUT.",
+        "R1 поместить у A1, R2 — у передней стенки под F1.",
+        "Защитить ответвления изоляцией. Жгут A2 вывести над перегородкой по модели.",
+        "Оставить свободными антенну A1 и щели A2.",), 120)
+    s.text(165, 108, "Держатель F1 без проводов (1:1)", 3.5)
+    x, y = 165, 94
+    upper = [(x + a, y + r) for a, r in FUSE_PROFILE]
+    lower = [(x + a, y - r) for a, r in reversed(FUSE_PROFILE)]
+    s.outline(upper + lower, 0.35)
+    s.line(x - 4, y, x + FUSE_LENGTH + 7, y, 0.18, "center")
+    s.hdim(x, x + FUSE_LENGTH, 80, y - 4, "48 макс.")
+    s.vdim(y - 8, y + 8, x + FUSE_LENGTH + 13, x + 25, "16")
+    s.text(295, 122, "F1 у передней стенки", 3.5)
+    s.text(295, 114, "Поперёк оси держателя, X = 76,5 (1:1)", 2.5)
+    x, y = 309, 76
+    s.hatch(x, y, WALL, B, -1)
+    s.line(x + WALL, y + B, x + 40, y + B, 0.25, "hidden")
+    s.rect(x + WALL, y + 18, 2.5, 5, 0.25)
+    s.circle(x + FUSE_AXIS_Y, y + FUSE_AXIS_Z, FUSE_DIAMETER / 2, 0.35)
+    s.center_mark(x + FUSE_AXIS_Y, y + FUSE_AXIS_Z, 10)
+    s.leader(x + WALL + 1, y + 19, x + 26, y + 9, "16")
+    s.text(350, 101, "Номинальные зазоры корпуса F1", 2.5)
+    s.text(350, 96, "До передней стенки 2,5", 2.5)
+    s.text(350, 91, "До крышки 1,5", 2.5)
+    s.text(350, 86, "До правой стенки 10", 2.5)
+    s.text(295, 66, "Посадку ленты и запас провода проверить на образце.", 2.5)
 
 
 def main():
@@ -480,7 +489,7 @@ def main():
     s.leader(x + 80, y + 76, x + 91, y + 91, 4)
     s.leader(x + 168, y + 135, x + 154, y + 147, 5)
     s.leader(x + 147, y + 45, x + 126, y + 59, 6)
-    s.leader(x + 186, y + 48, x + 192, y + 61, 10)
+    s.leader(x + 160, y + 35, x + 179, y + 40, 10)
     s.leader(x + 224, y + 74, x + 235, y + 84, 15)
     side_view(s, 307, 217, "left", True)
     s.text(306, 257, "Вид слева (1:1)", 3.5)
@@ -493,7 +502,7 @@ def main():
         "6. Внешние устройства подключить по листу 2. На виде сверху показаны монтажные контуры.",
         "7. Проверить доступ к Micro-USB и F1, посадку крепежа и закрытие корпуса на собранном образце.",), 105)
     s.notes(302, 107, "Положение держателя F1", (
-        "Поз. 10 расположена под углом в плане и выше платы A3. Зазор показан на листе 4.",), 105)
+        "Показан монтажный габарит поз. 10. Ось вдоль X, торцы X = 54 и 102. Ось Y = 13,5, Z = 20,5. Крепление и зазоры — на листе 4.",), 105)
     s.text(48, 79, "А–А (1:1), по Y = 62 мм", 3.5)
     section(s, 48, 23, True)
     c.showPage()
